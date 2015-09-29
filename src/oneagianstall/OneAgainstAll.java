@@ -11,8 +11,10 @@ package oneagianstall;
 
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Arrays;
 
 
 
@@ -79,11 +81,11 @@ static String tmpVer="v1";
         String inputFile=args[0];
         Integer maxRepetitions=1;
         Integer numOfStratas=2;
-        Integer funcCount=15;// not used anywhere
+        Integer totalClassesInput=15;
         try {
         maxRepetitions=Integer.parseInt(args[1]);
         numOfStratas=Integer.parseInt(args[2]);
-        funcCount=Integer.parseInt(args[3]);// not used anywhere
+        totalClassesInput=Integer.parseInt(args[3]);
         
         }catch (NumberFormatException ex){
             System.out.println ("Please only type integer numbers for repetitions and stratas");
@@ -111,16 +113,33 @@ static String tmpVer="v1";
        objWekaGraphEval=new MyWeka2();
        objWekaGraphEval.ISSETONLYBESTCASE=true;
        objWekaGraphEval.initializeRepetitionsArray();
+       String sourceDir=progDir+File.separator+"pairwise_"+datasetName ;
        
+       Double []sensitivity=new Double[totalClassesInput];//totalclassess is equal to total ranks
+       Double []specificity=new Double[totalClassesInput];
+       Double []PCCC=new Double[totalClassesInput];
+       Double []csmfAccuracy=new Double[totalClassesInput];
+       
+       Arrays.fill(sensitivity,0.0);
+       Arrays.fill(specificity,0.0);
+       Arrays.fill(PCCC,0.0);
+       Arrays.fill(csmfAccuracy,0.0);
+       
+   
        for (int repCount=0; repCount<maxRepetitions; repCount++){
+                        
+                        File f=new File(sourceDir);
+                        //FileUtils.deleteDirectory(f);
+                        m.recursiveDelete(f);    
+           
                         int testFold=(repCount%numOfStratas);
-                        //System.out.println("test....fold...."+testFold);
-                        objWekaGraphEval.createTestTrainData(inputFile, numOfStratas, testFold, false);
-                        String trainFile =progDir+File.separator+"trainset.arff";
-                        String testFile=progDir+File.separator+"testset.arff";
+                        objWekaGraphEval.createTestTrainData(inputFile, numOfStratas, testFold, false,sourceDir);
+                        
+                        String trainFile =sourceDir+File.separator+"trainset.arff";
+                        String testFile=sourceDir+File.separator+"testset.arff";
                         //final String progDir="/home/shary/sharywork/new_course_datasc/";
 
-                        String sourceDir=progDir+File.separator+"pairwise_"+datasetName ;
+                       
 
 
                              // clean up and create directories
@@ -140,29 +159,60 @@ static String tmpVer="v1";
                                 //   m.mergeDatasetsPartiallyandClassify(dataBase,train_Test_Arff[1],train_Test_Arff[0],numberofParts,funcCount,
                                  //		  objWekaGraphEval,singleReleaseNumParts,isResampling);
                                //else
-                                    m.graphicalEvaluation( train_Test_Arff, datasetName,funcCount,objWekaGraphEval,
+                                    m.graphicalEvaluation( train_Test_Arff, datasetName,totalClassesInput,objWekaGraphEval,
                                             isResampling, sourceDir);
                                  //end: weka format conversion
+                 
+                              ConfusionTable ct= objWekaGraphEval.getConfusionTable();
+                              ct.calculateMeasures();    
+                              Double []lSensitivity=ct.getSensitivity();
+                              Double []lSpecificity=ct.getSpecificity();
+                              Double []lPCCC=ct.getPCCC();
+                              Double []lCsmfAccuracy=ct.getCsmfAccuracy();
+                              for (int j=0; j<totalClassesInput; j++){
+                                  sensitivity[j]+=lSensitivity[j];
+                                  specificity[j]+=lSpecificity[j];
+                                  PCCC[j]+=lPCCC[j];
+                                  csmfAccuracy[j]+=lCsmfAccuracy[j];
+                              }
+         
        }// end of repetitions
         System.out.println("*****************************************************************");
         System.out.println("*****************************Final Output************************");
         System.out.println("*****************************************************************");
         
         System.out.println("Total repetitions "+ maxRepetitions);
-        int totalClasses=objWekaGraphEval.repTP.size();
-        for (int cnt=0; cnt<totalClasses;cnt++){
+       
+        for (int rank=0; rank<totalClassesInput;rank++){
+            sensitivity[rank]=sensitivity[rank]/maxRepetitions;
+            specificity[rank]=specificity[rank]/maxRepetitions;
+            PCCC[rank]=PCCC[rank]/maxRepetitions;
+            csmfAccuracy[rank]=csmfAccuracy[rank]/maxRepetitions;
+
+            System.out.println("Rank "+ (rank+1) +": sensitivity= "+sensitivity[rank]
+                      + ", specificity= "+specificity[rank]+ ", PCCC= "+PCCC[rank]+ ", csmf accuracy= "+ csmfAccuracy[rank] );
+       }
+   
+        /*int totalRanks=objWekaGraphEval.repTP.size();
+        for (int cnt=0; cnt<totalRanks;cnt++){
             Double tp=objWekaGraphEval.repTP.get(cnt);
             Double tpRate=(tp/(double)maxRepetitions)/100;
            
            // Calculating PCCC=(TP-(k/N))/(1-(k/N))
             // k = top 1 , 2 ,..n and N= 15/classes
-            double KoverN= (double)(cnt+1)/(double)funcCount;
-            double minusKoverN= 1-KoverN;
-            double PCCC= (tpRate-KoverN)/minusKoverN;
+            double KoverN= (double)(cnt+1)/(double)totalClassesInput;
+            double OneMinusKoverN= 1-KoverN;
+            double PCCC= (tpRate-KoverN)/OneMinusKoverN;
+            //sensitivity=tp/total records
+            //specificity=tn/(fp+tn)
+            System.out.println("On top "+ (cnt+1)+ ", Sensitivity= "+tpRate + ", PCCC= "+PCCC ); 
+            //calcualte CSMF for each rank
             
-            System.out.println("On top "+ (cnt+1)+ ", TP= "+tpRate + ", PCCC= "+PCCC ); 
         
-        }
+        }*/
+       // ConfusionTable ct= objWekaGraphEval.getConfusionTable();
+        //ct.calculateMeasures();
+       // ct.print();
 
         } catch (Exception ex) {
            // Logger.getLogger(Main.class.getName()).log(Level.SEVERE, null, ex);
@@ -264,8 +314,8 @@ static String tmpVer="v1";
 
           
 
-           File f=new File(sourceDir +File.separator+"pairwise");
-           recursiveDelete(f);
+           //File f=new File(sourceDir +File.separator+"pairwise");
+           //recursiveDelete(f);
                   
             // do resampling only for the training file
                    objWeka.generate_1aginstall_files ( training, sourceDir +File.separator+"pairwise",isResampling);
@@ -273,9 +323,9 @@ static String tmpVer="v1";
                    
                    // filess
 
-                   String executedPercentFile=sourceDir+File.separator+"graphs"+File.separator+"Results_"+program+".html"; //open same html file
+                  String executedPercentFile=sourceDir+File.separator+"graphs"+File.separator+"Results_"+program+".html"; //open same html file
                            //"\\graphs\\allGraphPercentages.txt";
-                   BufferedWriter outExecFile=new BufferedWriter(new FileWriter(executedPercentFile,true));
+                   BufferedWriter outExecFile=new BufferedWriter(new FileWriter(executedPercentFile,false));
                    outExecFile.write("<p>////////////////////////////////////////////////////////");
                    outExecFile.newLine();
                    outExecFile.write("<b> Using "+db1+" to identify faults in "+db2 +" </b>");
@@ -311,6 +361,7 @@ static String tmpVer="v1";
    * Recursive delete files.
    */
   void recursiveDelete (File dirPath) throws Exception {
+    System.gc();
     String [] ls = dirPath.list ();
     
     if (ls!=null)
@@ -318,8 +369,12 @@ static String tmpVer="v1";
             File file = new File (dirPath, ls [idx]);
             if (file.isDirectory ())
                 recursiveDelete (file);
-            file.delete ();
+            //System.out.println ("deleting..."+file.getName());
+            if (!file.delete ())
+                throw new FileNotFoundException("unable to delete"+file);
+            file=null;
         }
+    
   }
 
     

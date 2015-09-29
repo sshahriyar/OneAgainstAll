@@ -60,7 +60,7 @@ public class MyWeka2 {
   private Integer totalNumberofDatabases;
  public boolean ISSETONLYBESTCASE=false;
   public ArrayList<Double> repTP;
-  
+  private ConfusionTable confusionTable=null;
   /**
    * creates an array for maximum repetitions
    * @param reps 
@@ -69,6 +69,22 @@ public class MyWeka2 {
       repTP= new ArrayList<Double>();
      
   }
+  
+  /**
+   * 
+   * @return 
+   */
+  public ConfusionTable getConfusionTable(){
+      return this.confusionTable;
+  }
+  /**
+   * 
+   * @param pathName
+   * @param testPathName
+   * @throws FileNotFoundException
+   * @throws IOException
+   * @throws Exception 
+   */
    public void LoadArffFile(String pathName,String testPathName) throws FileNotFoundException, IOException, Exception
     {
         this.dataPathName=pathName;
@@ -451,7 +467,7 @@ public class MyWeka2 {
      * @throws java.lang.Exception
      */
     
-    public void createTestTrainData(String arffFile,int totalFolds, int foldNumber,boolean isInvert) throws Exception{
+    public void createTestTrainData(String arffFile,int totalFolds, int foldNumber,boolean isInvert, String sourceDir) throws Exception{
         
     Random rand = new Random(1);
     Instances randData  =loadDataSets(arffFile)[0];
@@ -478,9 +494,9 @@ public class MyWeka2 {
           }
           
           
-          String subjectDir=arffFile.substring(0,arffFile.lastIndexOf(File.separator));
-                DataSink.write(subjectDir+File.separator+"trainset.arff" , train);
-               DataSink.write(subjectDir+File.separator +"testset.arff" , test);
+         // String subjectDir=arffFile.substring(0,arffFile.lastIndexOf(File.separator));
+                DataSink.write(sourceDir+File.separator+"trainset.arff" , train);
+               DataSink.write(sourceDir+File.separator +"testset.arff" , test);
                 
                 //DataSink.write(arffFile.replaceAll("[\\w]*[.]arff$", "testset.arff") , test);
       
@@ -580,7 +596,10 @@ public class MyWeka2 {
                             tempData=weka.filters.supervised.instance.Resample.useFilter(tempData, reSamp);
                         }
                         //folderNameForPairWiseFiles += "\\" +classVal+ ".arff";
-                        DataSink.write(folderNameForPairWiseFiles+File.separator +classVal.replace(":", "_")+ ".arff", tempData);
+                       String fileName=folderNameForPairWiseFiles+File.separator +classVal.replace(":", "_")+ ".arff";
+                       
+                        DataSink.write(fileName, tempData);
+                        
                       
                   }
 
@@ -911,7 +930,20 @@ if (!modelFile.isEmpty()){
 // output predictions on test set 
 System.out.println("Loading Test Data");
 Instances test = loadDataSets(testFile)[0];
-
+///////////////////////////////
+//Getting total classes and their names to initalizes confusion table
+Integer totalClasses=test.classAttribute().numValues();
+Integer totalRecords=test.numInstances();
+Enumeration e= test.classAttribute().enumerateValues();
+String [] classes= new String[totalClasses];
+int cnt=0;
+while (e.hasMoreElements()){
+    classes[cnt++]=e.nextElement().toString();
+}
+confusionTable=new ConfusionTable(totalClasses, classes,totalRecords);
+//////
+///
+/////
 if (classifiers==null){
                     System.out.println("Loading data");
                     Instances[] datasets =loadDataSets(folderTrainData);
@@ -1041,7 +1073,7 @@ for (int i = 0; i < test.numInstances(); i++) {
 //////////////////////////////
         String correctClass=test.instance(i).stringValue(test.classIndex());
        // System.out.println( "Correct class" +correctClass );
-        
+           
         
        // outputStream.newLine();
         //outputStream.write(test.instance(i).stringValue(0));
@@ -1099,6 +1131,8 @@ outputStream.close();
             Double worstCasefunctionCounter=0.0;
             Double bestCasefunctionCounter=0.0;
           boolean isFaulty=false;
+       
+          
         for (Map.Entry<Double,String> itEpRanks: sortValue.descendingMap().entrySet() )  {  
          //for (Map.Entry<Double,String> itEpRanks: sortValue.entrySet() )  {  
            
@@ -1117,14 +1151,17 @@ outputStream.close();
                  Integer foundCompSize=0;
                 // if ( itEpRanks.getValue().contains("grepbuf"))
                      //{ String hell = ""; }
-                String rankVal=itEpRanks.getValue();
+                String rankPrediction=itEpRanks.getValue();
+                
                  for (int j=0; j<components.length;j++) // if there re multiple functions/components
                          // compare each
 
-                     if ( rankVal.contains(components[j]+" ")){// || components[j].contains(rankVal.trim())){
+                     if ( rankPrediction.contains(components[j]+" ")){
+                         // || components[j].contains(rankVal.trim())){
                   //   .matches("\\b"+components[j]+"\\b" )){
 
-                         isFaulty=true;// break;     // stop when u find the first faulty function/component
+                         isFaulty=true;// break;     
+                           // stop when u find the first faulty function/component
                       // if (!Main.testDBforfuncStatements.isEmpty())
                         //       foundCompSize=findFunctionSizes(components[j],objSql);
                        break;
@@ -1135,7 +1172,8 @@ outputStream.close();
                    // if (isBestCase==false)
                       worstCasefunctionCounter+=fLength;
                       //if (Main.testDBforfuncStatements.isEmpty())
-                             bestCasefunctionCounter++;
+                      bestCasefunctionCounter++;
+                      confusionTable.updateCorrectPrediction(rankCounter, correctClassVal);
                       //else
                         //  bestCasefunctionCounter+=foundCompSize;
                      
@@ -1144,6 +1182,7 @@ outputStream.close();
                  else{
                      worstCasefunctionCounter+=fLength;
                      bestCasefunctionCounter+=fLength;
+                      confusionTable.updateWrongPrediction(rankCounter, correctClassVal, rankPrediction);
                  }
                  
             } 
@@ -1152,6 +1191,7 @@ outputStream.close();
          if (isFaulty==false){
              worstCasefunctionCounter=totalFunctions;
              bestCasefunctionCounter=totalFunctions;
+           //  confusionTable.updateWrongPrediction(rankCounter, correctClassVal, rankPrediction);
          }
              
             //functionCounter--;
@@ -1304,7 +1344,7 @@ outputStream.close();
                //                        objChart.AddSeriesData(funcPercentage,( executionPercentage));
                                        //  objChart.AddSeriesData(actualFunctions,( executionPercentage));
                                         outputStream.write( funcPercentage + " ("+ actualFunctions +") = " + executionPercentage );
-                                        System.out.println("TP on top "+actualFunctions + "= " + executionPercentage ); 
+                                      //----  System.out.println("TP on top "+actualFunctions + "= " + executionPercentage ); 
                                          if (i==0){// stores the Tp rate for all repetitions
                                              boolean flag=false;
                                              try {
@@ -1330,8 +1370,8 @@ outputStream.close();
                                             outExecPer.newLine();
                                          }
                                     }
-                             outputStream.write("Cumulative Traces"+cumulativeTotalTraces);
-                             System.out.println("Cumulative Traces"+cumulativeTotalTraces);
+                             outputStream.write("Total test records"+cumulativeTotalTraces);
+                             System.out.println("Total test records"+cumulativeTotalTraces);
                              outputStream.newLine();
                              outputStream.flush();
 
@@ -1358,8 +1398,9 @@ outputStream.close();
          //        + "\"Cumulative % of traces\",\""+chartFile.replace("\\","\\\\")+"\"); <br /> ");
 
          outExecPer.flush();
+         outExecPer.close();
      }
-
+   
  }
  /**
   * 
