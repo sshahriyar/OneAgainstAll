@@ -7,8 +7,10 @@
 package oneagianstall;
 
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  *
@@ -267,27 +269,79 @@ public class ConfusionTable {
     System.out.println();
     for (Map.Entry<Integer, HashMap<String,HashMap<Metrics,Integer>>> ranks:
             confusionTable.entrySet()){ 
-            // first get the ranks
-           System.out.println("rank "+(ranks.getKey()+1 ));
-           HashMap<String,HashMap<Metrics,Integer>> theRank=ranks.getValue();
-  
-         // second get the classess
-          for (Map.Entry<String,HashMap<Metrics,Integer>> classes:theRank.entrySet()){
-           String key=classes.getKey();
+                    // first get the ranks
+                 System.out.println("rank "+(ranks.getKey()+1 ));
+                 HashMap<String,HashMap<Metrics,Integer>> theRank=ranks.getValue();
+
+                 // second get the classess
+                  for (Map.Entry<String,HashMap<Metrics,Integer>> classes:theRank.entrySet()){
+                         String key=classes.getKey();
            
-           // third get the metrics
-           HashMap<Metrics,Integer> metric= classes.getValue();
-           
-          
-          
-          System.out.println(" class:"+key+" TN:"+metric.get(Metrics.TN)+  " TP "+
-                  metric.get(Metrics.TP)+ " FP:"+metric.get(Metrics.FP)+ 
-                  " FN:"+metric.get(Metrics.FN));
+                        // third get the metrics
+                        HashMap<Metrics,Integer> metric= classes.getValue();
+
+
+
+                        System.out.println(" class:"+key+" TN:"+metric.get(Metrics.TN)+  " TP "+
+                               metric.get(Metrics.TP)+ " FP:"+metric.get(Metrics.FP)+ 
+                               " FN:"+metric.get(Metrics.FN));
                      
-      }
-    }
+                 }
+          }
         
     }
+    
+    /**
+     * Classes sorted by their sensitibity (kinda accuarcy here) per rank
+     * 
+     * @return 
+     */
+    public Map<String,Double> calculateMeasuresPerClass(){
+    
+    System.out.println();
+     java.util.Map<String,Double> sortedClasses=new java.util.TreeMap<String,Double>();
+    
+    
+    for (Map.Entry<Integer, HashMap<String,HashMap<Metrics,Integer>>> ranks:
+            confusionTable.entrySet()){ 
+                    // first get the ranks
+                 System.out.println("For rank "+(ranks.getKey()+1 ));
+                 HashMap<String,HashMap<Metrics,Integer>> theRank=ranks.getValue();
+
+                 /// code for sorters by value
+                // java.util.SortedSet<Map.Entry<String, Double>> sortedSet= new 
+                  //                    java.util.TreeSet<>(new ValueComparator());
+                // java.util.Map<String,Double> sortedClasses=new java.util.TreeMap<String,Double>();
+    
+                 
+                 
+                        // second get the classess
+                         for (Map.Entry<String,HashMap<Metrics,Integer>> classes:theRank.entrySet()){
+                                String key=classes.getKey();
+
+                               // third get the metrics
+                               HashMap<Metrics,Integer> metric= classes.getValue();
+
+                               Double sensitivityForClass= ((double)metric.get(Metrics.TP))/((double)(metric.get(Metrics.TP)+metric.get(Metrics.FN)));
+                               if (!sensitivityForClass.isNaN())
+                                    sortedClasses.put(key, sensitivityForClass);
+
+                             //  System.out.println(" class:"+key);//+" TN:"+metric.get(Metrics.TN)+  " TP "+
+                                 //     metric.get(Metrics.TP)+ " FP:"+metric.get(Metrics.FP)+ 
+                                   //   " FN:"+metric.get(Metrics.FN));
+
+                        }
+                  
+                ///sortedSet.addAll(sortedClasses.entrySet());
+                
+                //System.out.println(sortedSet);
+                break; // just do it only for rank 1\
+               
+          }
+    return sortedClasses;
+    }
+    
+    ///////////////////////////////////////////////////////comparator ends that sort by value
     /**
      * 
      * @param args 
@@ -295,13 +349,15 @@ public class ConfusionTable {
     public static void main(String []args){
         String [] a={"1","2","3","4"};
         ConfusionTable t= new ConfusionTable(4,a,6);
-        t.updateCorrectPrediction(0, "1");
-        t.updateCorrectPrediction(0, "2");
-        t.updateCorrectPrediction(0, "3");
-        t.updateCorrectPrediction(0, "1");
-        t.updateWrongPrediction(0,"1", "4");
-        t.updateWrongPrediction(0,"1", "2");
-        //t.print();
-        t.calculateMeasures();
+        t.updateCorrectPrediction(1, "1");
+        t.updateCorrectPrediction(1, "2");
+        t.updateCorrectPrediction(1, "3");
+        t.updateCorrectPrediction(1, "1");
+        t.updateWrongPrediction(1,"1", "4");
+        t.updateWrongPrediction(1,"1", "2");
+        t.print();
+        
+        t.calculateMeasuresPerClass();
+      //  t.calculateMeasures();
     }
 }

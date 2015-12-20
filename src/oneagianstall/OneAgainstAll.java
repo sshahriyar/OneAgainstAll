@@ -36,6 +36,8 @@ import java.util.Arrays;
 //import com.mysql.jdbc.ResultSet;
 
 import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.TreeMap;
 //import java.util.ArrayList;
 //import java.util.logging.Level;
 //import java.util.logging.Logger;
@@ -82,10 +84,14 @@ static String tmpVer="v1";
         Integer maxRepetitions=1;
         Integer numOfStratas=2;
         Integer totalClassesInput=15;
+        Boolean isDirichletSampling=false;
+        String finalOutputFile="finalOutputVA.txt";
         try {
         maxRepetitions=Integer.parseInt(args[1]);
         numOfStratas=Integer.parseInt(args[2]);
         totalClassesInput=Integer.parseInt(args[3]);
+        if (args[4].equalsIgnoreCase("t"))
+            isDirichletSampling=true;
         
         }catch (NumberFormatException ex){
             System.out.println ("Please only type integer numbers for repetitions and stratas");
@@ -97,8 +103,7 @@ static String tmpVer="v1";
        
        //String inputFile="/home/shary/sharywork/ryerson/experiments/arff/MDSFinal.arff";
        
-        
-        
+              
 
       // boolean isMergeTwoDataSets=false;
        boolean isResampling=false;
@@ -114,11 +119,14 @@ static String tmpVer="v1";
        objWekaGraphEval.ISSETONLYBESTCASE=true;
        objWekaGraphEval.initializeRepetitionsArray();
        String sourceDir=progDir+File.separator+"pairwise_"+datasetName ;
+       finalOutputFile=sourceDir+File.separator+finalOutputFile;
+                        
        
        Double []sensitivity=new Double[totalClassesInput];//totalclassess is equal to total ranks
        Double []specificity=new Double[totalClassesInput];
        Double []PCCC=new Double[totalClassesInput];
        Double []csmfAccuracy=new Double[totalClassesInput];
+       Map<String,Double> sortedClassesForRank1=new TreeMap();
        
        Arrays.fill(sensitivity,0.0);
        Arrays.fill(specificity,0.0);
@@ -132,15 +140,32 @@ static String tmpVer="v1";
                         //FileUtils.deleteDirectory(f);
                         m.recursiveDelete(f);    
            
-                        int testFold=(repCount%numOfStratas);
-                        objWekaGraphEval.createTestTrainData(inputFile, numOfStratas, testFold, false,sourceDir);
+                           //DirichletSampling dSampl= new DirichletSampling();
+                          // inputFile=dSampl.sampleDataByDirichlet(inputFile);
+                           
+                         //select a partition (one of the folds) for testing randomly
+                        
+                        if (isDirichletSampling==false){
+                            int testFold=(repCount%numOfStratas);
+                            objWekaGraphEval.createTestTrainData(inputFile, numOfStratas, testFold, false,sourceDir);
+                        }else{
+                            numOfStratas=4; // divide data into four parts, keep 3 (75%) for training and reamining (25%)for testing 
+                            int testFold=(repCount%numOfStratas);
+                            objWekaGraphEval.createTestTrainData(inputFile, numOfStratas, testFold, false,sourceDir);
+                        }
+                            
                         
                         String trainFile =sourceDir+File.separator+"trainset.arff";
                         String testFile=sourceDir+File.separator+"testset.arff";
-                        //final String progDir="/home/shary/sharywork/new_course_datasc/";
-
-                       
-
+                        
+                        if (isDirichletSampling==true){
+                           DirichletSampling
+                                   dSample= new DirichletSampling();
+                           
+                          trainFile=dSample.resampleMinorityClasses(trainFile);
+                          testFile=dSample.sampleDataByDirichlet(testFile);
+                          
+                        }
 
                              // clean up and create directories
                             File folder = new File (sourceDir+File.separator+"graphs");
@@ -165,23 +190,62 @@ static String tmpVer="v1";
                  
                               ConfusionTable ct= objWekaGraphEval.getConfusionTable();
                               ct.calculateMeasures();    
+                              //ct.print();
+                              java.util.Map<String,Double> sortedClassByPerc=ct.calculateMeasuresPerClass();
+                              //measures per Rank in each array (i.e., rank = total Classes)
                               Double []lSensitivity=ct.getSensitivity();
                               Double []lSpecificity=ct.getSpecificity();
                               Double []lPCCC=ct.getPCCC();
                               Double []lCsmfAccuracy=ct.getCsmfAccuracy();
-                              for (int j=0; j<totalClassesInput; j++){
+                              
+                              for (int j=0; j<totalClassesInput; j++){// saving sensitivitiies sum for multiple repetitions
                                   sensitivity[j]+=lSensitivity[j];
                                   specificity[j]+=lSpecificity[j];
                                   PCCC[j]+=lPCCC[j];
                                   csmfAccuracy[j]+=lCsmfAccuracy[j];
+                                  
+                              }
+                              
+                              //code for classes and their percentages in rank 1
+                              for (Map.Entry<String,Double> it:sortedClassByPerc.entrySet()){
+                                  String key=it.getKey();
+                                  if (!sortedClassesForRank1.containsKey(key))
+                                        //taking care of new classes
+                                        // could be found in different iterations
+                                      sortedClassesForRank1.put(key,it.getValue());
+                                  else{
+                                     Double val=sortedClassesForRank1.get(key);
+                                     val+=it.getValue();
+                                     sortedClassesForRank1.put(key,val);
+                                     
+                                    }
                               }
          
        }// end of repetitions
+        
+       BufferedWriter outFile=new BufferedWriter(new FileWriter(finalOutputFile));
+       String text="";
+       if (isDirichletSampling)
+           text="According to Resampling of Test Set by Dirichlet Distribution";
+       else
+           text="According to Cross Validation On Original Distribution of Classes";
+       
         System.out.println("*****************************************************************");
         System.out.println("*****************************Final Output************************");
+        System.out.println(text);
         System.out.println("*****************************************************************");
-        
         System.out.println("Total repetitions "+ maxRepetitions);
+       
+        outFile.write("*****************************************************************");
+        outFile.newLine();
+        outFile.write("*****************************Final Output************************");
+        outFile.newLine();
+        outFile.write(text);
+        outFile.newLine();
+        outFile.write("*****************************************************************");
+        outFile.newLine();
+        outFile.write("Total repetitions "+ maxRepetitions);
+        outFile.newLine();
        
         for (int rank=0; rank<totalClassesInput;rank++){
             sensitivity[rank]=sensitivity[rank]/maxRepetitions;
@@ -191,8 +255,39 @@ static String tmpVer="v1";
 
             System.out.println("Rank "+ (rank+1) +": sensitivity= "+sensitivity[rank]
                       + ", specificity= "+specificity[rank]+ ", PCCC= "+PCCC[rank]+ ", csmf accuracy= "+ csmfAccuracy[rank] );
+ 
+            outFile.write("Rank "+ (rank+1) +": sensitivity= "+sensitivity[rank]
+                      + ", specificity= "+specificity[rank]+ ", PCCC= "+PCCC[rank]+ ", csmf accuracy= "+ csmfAccuracy[rank] );
+            outFile.newLine();
        }
    
+         //Code for classes and their percentages in rank 1
+        System.out.println();
+        System.out.println();
+        outFile.newLine();
+        outFile.newLine();
+        
+        System.out.println("Top classes for Rank 1 sorted by their sensitivities are:");
+        outFile.write("Top classes in Rank 1 sorted by their sensitivities are:");
+        outFile.newLine();
+        
+        java.util.SortedSet<Map.Entry<String, Double>> sortedSetByVal= new 
+                                     java.util.TreeSet<>(new ValueComparator());
+        
+         for (Map.Entry<String,Double> it:sortedClassesForRank1.entrySet()){
+                    String key=it.getKey();
+                    Double val= it.getValue();
+                    val=(val/maxRepetitions)*100;
+                    sortedClassesForRank1.put(key,val);
+                        
+            }
+         sortedSetByVal.addAll(sortedClassesForRank1.entrySet());
+         System.out.println(sortedSetByVal);
+         outFile.write(sortedSetByVal.toString());
+         outFile.newLine();
+       
+         outFile.flush();
+         outFile.close();
         /*int totalRanks=objWekaGraphEval.repTP.size();
         for (int cnt=0; cnt<totalRanks;cnt++){
             Double tp=objWekaGraphEval.repTP.get(cnt);

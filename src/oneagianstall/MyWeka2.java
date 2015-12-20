@@ -462,7 +462,7 @@ public class MyWeka2 {
      * 
      * @param arffFile
      * @param totalFolds
-     * @param foldNumber
+     * @param foldNumber test set fold number
      * @param isInvert
      * @throws java.lang.Exception
      */
